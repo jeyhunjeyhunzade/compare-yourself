@@ -9,6 +9,8 @@ import {
   CognitoUserAttribute,
   CognitoUserPool,
   CognitoUser,
+  AuthenticationDetails,
+  CognitoUserSession,
 } from "amazon-cognito-identity-js";
 
 import { User } from "./user.model";
@@ -82,11 +84,34 @@ export class AuthService {
       Username: username,
       Password: password,
     };
+    const authDetails = new AuthenticationDetails(authData);
+    const userData = {
+      Username: username,
+      Pool: userPool,
+    };
+    const cognitoUser = new CognitoUser(userData);
+    const that = this;
+    cognitoUser.authenticateUser(authDetails, {
+      onSuccess(result: CognitoUserSession) {
+        that.authStatusChanged.next(true);
+        that.authDidFail.next(false);
+        that.authIsLoading.next(false);
+        console.log(result);
+      },
+      onFailure(err) {
+        that.authDidFail.next(true);
+        that.authIsLoading.next(false);
+        console.log(err);
+      },
+    });
     this.authStatusChanged.next(true);
     return;
   }
-  getAuthenticatedUser() {}
+  getAuthenticatedUser() {
+    return userPool.getCurrentUser();
+  }
   logout() {
+    this.getAuthenticatedUser().signOut();
     this.authStatusChanged.next(false);
   }
   isAuthenticated(): Observable<boolean> {
@@ -95,7 +120,17 @@ export class AuthService {
       if (!user) {
         observer.next(false);
       } else {
-        observer.next(false);
+        user.getSession((err, session) => {
+          if (err) {
+            observer.next(false);
+          } else {
+            if (session.isValid()) {
+              observer.next(true);
+            } else {
+              observer.next(false);
+            }
+          }
+        });
       }
       observer.complete();
     });
